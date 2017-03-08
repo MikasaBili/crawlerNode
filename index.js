@@ -2,8 +2,8 @@ const cheerio = require('cheerio')
 const request = require('superagent')
 const fs = require('fs')
 const SEARCH_URL = 'http://www.mzitu.com/'
-// const keyword = 'japan'
-let page = '22'
+const keyword = 'japan'
+let page = '1'
 let content = []
 //解析html
 const setUrl = (keyword, page) => {
@@ -23,23 +23,29 @@ const setUrl = (keyword, page) => {
 //取title和src
 const setSrc = (html, keyword) => {
   let $ = cheerio.load(html)
+  let setArr = []
   let src = $('ul#pins li a img')
   for (let data in src) {
     if (/^[0-9]*$/.test(data)) {
       let obj = {
-      title: src[data].attribs.alt,
+      title: trims(src[data].attribs.alt),
       src: src[data].attribs['data-original']
     }
-    content.push(obj)
+    setArr.push(obj)
     }
   }
-  let next = $('.nav-links .next.page-numbers').text()
-  if (next) {
-    lookUp(keyword, ++page)
-  }
-  console.log('解析完成')
+  return setArr
 }
-
+//整理title
+const trims= (str) => {  
+  return str.replace(/[ ]|\?/g,"")
+}
+//查看是否下一页
+const testNext =(html) => {
+  let $ = cheerio.load(html)
+  let next = $('.nav-links .next.page-numbers').text()
+  return next === '' ? false : true
+}
 //下载
 const download = (title, src) => {
   console.log(`下载：${title}`)
@@ -51,28 +57,36 @@ const download = (title, src) => {
 //循环
 const arrayEach = (fun) => {
   content.forEach((value) => {
-    fun(value.title, value.src)
+    value.forEach((val) => {
+      fun(val.title, val.src)
+    })
   })
 }
-
 const lookUp = async (keyword, page) => {
   try {
     console.log(`关键字${keyword},页数${page}`)
     let getHtml = await setUrl(keyword, page)
-    console.log('解析')
+    console.log('开始解析')
     let getSrc = setSrc(getHtml, keyword, page)
+    content.push(getSrc)
+    console.log('下一页')
+    if (testNext(getHtml)) {
+      return lookUp(keyword, ++page)
+    }else{
+      return content
+    }
   } catch (error) {
     console.error(error)
   }
 }
-
 (async function crawler() {
-    let keyword = 'japan'
     try {
         let links = await lookUp(keyword, page)
-        await arrayEach(download)
-        console.log('完成！')
+        console.log(links.length)
+        arrayEach(download)
+        console.log('下载完成！')
     } catch (err) {
         console.error(err)
     }
 })()
+
